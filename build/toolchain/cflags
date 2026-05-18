@@ -1,0 +1,5 @@
+-mlongcalls
+-fno-builtin-memcpy
+-fno-builtin-memset
+-fno-builtin-bzero
+"-specs=C:/Users/Arnas/Desktop/EMG_registravimo irenginys/build/specs/picolibc.specs"
