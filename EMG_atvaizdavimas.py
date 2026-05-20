@@ -178,7 +178,7 @@ class BLEWorker(QtCore.QThread):
                     await asyncio.sleep(0.1)
 
         except Exception:
-            self.status.emit("BLE ryšys nutruko")
+            self.status.emit("BLE ryšys nutrūko")
             self.connected_changed.emit(False)
             self.client = None
 
@@ -188,7 +188,7 @@ class EMGWindow(QtWidgets.QMainWindow):
         super().__init__()
 
         self.setWindowTitle("EMG - 1 kanalas")
-        self.resize(1200, 850)
+        self.resize(1200, 900)
 
         self.measurement_running = False
         self.csv_recording = False
@@ -247,12 +247,24 @@ class EMGWindow(QtWidgets.QMainWindow):
         )
         main_layout.addWidget(self.plot_rms)
 
+        self.rmsInfoLabel = QtWidgets.QLabel(
+            "Maksimali RMS amplitudė: 0.000 mV\n"
+            "Signalo trukmė: 0.000 s"
+        )
+        self.rmsInfoLabel.setStyleSheet("""
+            font-size: 10pt;
+            padding-top: 2px;
+            padding-bottom: 6px;
+            color: black;
+        """)
+        main_layout.addWidget(self.rmsInfoLabel)
+
         buttons_layout = QtWidgets.QHBoxLayout()
 
-        self.startMeasureButton = QtWidgets.QPushButton("Pradeti matavimą")
+        self.startMeasureButton = QtWidgets.QPushButton("Pradėti matavimą")
         self.stopMeasureButton = QtWidgets.QPushButton("Sustabdyti matavimą")
-        self.startCsvButton = QtWidgets.QPushButton("Pradeti irašymą")
-        self.stopCsvButton = QtWidgets.QPushButton("Sustabdyti irašymą")
+        self.startCsvButton = QtWidgets.QPushButton("Pradėti įrašymą")
+        self.stopCsvButton = QtWidgets.QPushButton("Sustabdyti įrašymą")
         self.saveButton = QtWidgets.QPushButton("Išsaugoti duomenis")
         self.clearButton = QtWidgets.QPushButton("Ištrinti grafikus")
 
@@ -266,7 +278,7 @@ class EMGWindow(QtWidgets.QMainWindow):
         main_layout.addLayout(buttons_layout)
 
         self.statusLabel = QtWidgets.QLabel("Ieškomas BLE...")
-        self.statusLabel.setStyleSheet("font-size: 12pt; padding: 5px;")
+        self.statusLabel.setStyleSheet("font-size: 11pt; padding: 5px;")
         main_layout.addWidget(self.statusLabel)
 
         self.startMeasureButton.clicked.connect(self.start_measurement)
@@ -356,10 +368,45 @@ class EMGWindow(QtWidgets.QMainWindow):
 
         self.sample_counter += 1
 
+    def calculate_main_impulse_duration(self, rms_list, rms_max):
+        if rms_max <= 0.0:
+            return 0.0
+
+        threshold = rms_max * 0.2
+
+        peak_index = rms_list.index(rms_max)
+
+        left = peak_index
+        while left > 0 and rms_list[left] >= threshold:
+            left -= 1
+
+        right = peak_index
+        while right < len(rms_list) - 1 and rms_list[right] >= threshold:
+            right += 1
+
+        duration_samples = right - left
+
+        duration_sec = duration_samples / SAMPLE_RATE
+
+        return duration_sec
+
     def update_plot(self):
         self.curve_ch1.setData(list(self.ch1_data))
         self.curve_rect.setData(list(self.ch1_rect_data))
         self.curve_rms.setData(list(self.ch1_rms_data))
+
+        rms_list = list(self.ch1_rms_data)
+        rms_max = max(rms_list)
+
+        duration_sec = self.calculate_main_impulse_duration(
+            rms_list,
+            rms_max
+        )
+
+        self.rmsInfoLabel.setText(
+            f"Maksimali RMS amplitudė: {rms_max:.3f} mV\n"
+            f"Signalo trukmė: {duration_sec:.3f} s"
+        )
 
     def update_status(self, text):
         self.statusLabel.setText(text)
@@ -377,11 +424,16 @@ class EMGWindow(QtWidgets.QMainWindow):
         self.recorded_data.clear()
         self.sample_counter = 0
 
+        self.rmsInfoLabel.setText(
+            "Maksimali RMS amplitudė: 0.000 mV\n"
+            "Signalo trukmė: 0.000 s"
+        )
+
     def save_csv(self):
         filename, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Save EMG Data",
-            "ads1292_emg_1ch_rectified_rms.csv",
+            "ads1292_emg.csv",
             "CSV Files (*.csv)"
         )
 
